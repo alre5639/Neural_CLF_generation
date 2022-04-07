@@ -5,8 +5,6 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import timeit 
-import matplotlib.pyplot as plt
-
 
 class Net(torch.nn.Module):
     
@@ -25,34 +23,31 @@ class Net(torch.nn.Module):
         u = self.control(x)
         return out,u
 
-
-
 def f_value(x,u):
-    # dynamics
-    y = []
-    G = 9.81  # gravity
-    L = 0.5   # length of the pole 
-    m = 0.15  # ball mass
-    b = 0.1   # friction
+    v = 6
+    l = 1
+    y = [] 
     
     for r in range(0,len(x)): 
-        f = [ x[r][1], 
-              (m*G*L*np.sin(x[r][0])- b*x[r][1]) / (m*L**2)]
+        f = [v*torch.sin(x[r][1]),
+             v*torch.tan(u[r][0])/l -(torch.cos(x[r][1])/(1-x[r][0]))]
         y.append(f) 
-    y = torch.tensor(y)
-    y[:,1] = y[:,1] + (u[:,0]/(m*L**2))
+    y = torch.tensor(y)    
     return y
 
 '''
 For learning 
 '''
-N = 500             # sample size
+N = 500            # sample size
 D_in = 2            # input dimension
 H1 = 6              # hidden dimension
 D_out = 1           # output dimension
 torch.manual_seed(10)  
-x = torch.Tensor(N, D_in).uniform_(-6, 6)           
+
+lqr = torch.tensor([[-0.8471 , -1.6414]])  # lqr solution
+x = torch.Tensor(N, D_in).uniform_(-1, 1)           
 x_0 = torch.zeros([1, 2])
+x = torch.cat((x, x_0), 0)
 
 '''
 For verifying 
@@ -60,24 +55,22 @@ For verifying
 x1 = Variable("x1")
 x2 = Variable("x2")
 vars_ = [x1,x2]
-G = 9.81 
-l = 0.5  
-m = 0.15
-b = 0.1
+v = 6
+l = 1
 config = Config()
 config.use_polytope_in_forall = True
 config.use_local_optimization = True
 config.precision = 1e-2
 epsilon = 0
 # Checking candidate V within a ball around the origin (ball_lb ≤ sqrt(∑xᵢ²) ≤ ball_ub)
-ball_lb = 0.5
-ball_ub = 6
+ball_lb = 0.2
+ball_ub = 0.8
 
 out_iters = 0
 valid = False
 while out_iters < 2 and not valid: 
     start = timeit.default_timer()
-    lqr = torch.tensor([[-23.58639732,  -5.31421063]])    # lqr solution
+    lqr = torch.tensor([[-23.58639732,  -5.31421063]]) # lqr solution
     model = Net(D_in,H1, D_out,lqr)
     L = []
     i = 0 
@@ -87,7 +80,6 @@ while out_iters < 2 and not valid:
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     while i < max_iters and not valid: 
-        # print(x)
         V_candidate, u = model(x)
         X0,u0 = model(x_0)
         f = f_value(x,u)
@@ -96,13 +88,11 @@ while out_iters < 2 and not valid:
         L_V = torch.diagonal(torch.mm(torch.mm(torch.mm(dtanh(V_candidate),model.layer2.weight)\
                             *dtanh(torch.tanh(torch.mm(x,model.layer1.weight.t())+model.layer1.bias)),model.layer1.weight),f.t()),0)
 
-        # With tuning term 
-        Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()\
-                    +2.2*((Circle_Tuning-6*V_candidate).pow(2)).mean()+(X0).pow(2) 
-        # Without tuning term
-#         Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()+ 1.2*(X0).pow(2)
-        
-        
+        # With tuning
+        Lyapunov_risk = (F.relu(-V_candidate)+ 2*F.relu(L_V+0.8)).mean()\
+                    +1.5*((Circle_Tuning-V_candidate).pow(2)).mean()+ 1.2*(X0).pow(2)
+
+
         print(i, "Lyapunov Risk=",Lyapunov_risk.item()) 
         L.append(Lyapunov_risk.item())
         optimizer.zero_grad()
@@ -118,8 +108,8 @@ while out_iters < 2 and not valid:
         # Falsification
         if i % 10 == 0:
             u_NN = (q.item(0)*x1 + q.item(1)*x2) 
-            f = [ x2,
-                 (m*G*l*sin(x1) + u_NN - b*x2) /(m*l**2)]
+            f = [v*sin(x2),
+                 v*tan(u_NN)/l -(cos(x2)/(1-x1))]
 
             # Candidate V
             z1 = np.dot(vars_,w1.T)+b1
@@ -149,20 +139,17 @@ while out_iters < 2 and not valid:
 
     stop = timeit.default_timer()
 
-
-    np.savetxt("w1.txt", model.layer1.weight.data, fmt="%s")
-    np.savetxt("w2.txt", model.layer2.weight.data, fmt="%s")
-    np.savetxt("b1.txt", model.layer1.bias.data, fmt="%s")
-    np.savetxt("b2.txt", model.layer2.bias.data, fmt="%s")
-    np.savetxt("q.txt", model.control.weight.data, fmt="%s")
+    np.savetxt("w1_p.txt", model.layer1.weight.data, fmt="%s")
+    np.savetxt("w2_p.txt", model.layer2.weight.data, fmt="%s")
+    np.savetxt("b1_p.txt", model.layer1.bias.data, fmt="%s")
+    np.savetxt("b2_p.txt", model.layer2.bias.data, fmt="%s")
+    np.savetxt("q_p.txt", model.control.weight.data, fmt="%s")
 
     print('\n')
     print("Total time: ", stop - start)
     print("Verified time: ", t)
     
     out_iters+=1
-
-
 
 epsilon = -0.00001
 start_ = timeit.default_timer() 
@@ -171,8 +158,8 @@ stop_ = timeit.default_timer()
 
 if (result): 
     print("Not a Lyapunov function. Found counterexample: ")
+    print(result)
 else:  
     print("Satisfy conditions with epsilon= ",epsilon)
     print(V_learn, " is a Lyapunov function.")
 t += (stop_ - start_)
-
