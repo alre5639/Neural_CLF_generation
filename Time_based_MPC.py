@@ -208,6 +208,8 @@ def get_nparray_from_matrix(x):
 
 def calc_nearest_index(state, cx, cy, cyaw, pind):
 
+    #A what if I just made it track to the nearest theta?
+    #instead of only search N_IND we serach everything and pick the closes theta
     dx = [state.x - icx for icx in cx[pind:(pind + N_IND_SEARCH)]]
     dy = [state.y - icy for icy in cy[pind:(pind + N_IND_SEARCH)]]
 
@@ -228,6 +230,10 @@ def calc_nearest_index(state, cx, cy, cyaw, pind):
 
     return ind, mind
 
+def get_nearest_theta(state, c_theta):
+    diff_arr = np.square(state.theta - np.array(c_theta))
+    min_ind = np.argmin(diff_arr)
+    return min_ind
 
 def predict_motion(x0, oa, od, xref):
     xbar = xref * 0.0
@@ -332,7 +338,9 @@ def calc_ref_trajectory(state, cx, cy, cyaw, ck, sp, tp, dl, pind):
 
     # print("xref: ", xref)
 
-    ind, _ = calc_nearest_index(state, cx, cy, cyaw, pind)
+    # ind, _ = calc_nearest_index(state, cx, cy, cyaw, pind)
+    # replace this with get nearest theta
+    ind = get_nearest_theta(state,tp)
 
     if pind >= ind:
         ind = pind
@@ -343,7 +351,7 @@ def calc_ref_trajectory(state, cx, cy, cyaw, ck, sp, tp, dl, pind):
     xref[3, 0] = cyaw[ind]
     xref[4, 0] = tp[ind]
     print("nearest index theta: ", tp[ind])
-    print("nearest index goal speed: ", sp[ind])
+    # print("nearest index goal speed: ", sp[ind])
     dref[0, 0] = 0.0  # steer operational point should be 0
 
     travel = 0.0
@@ -422,7 +430,9 @@ def do_simulation(cx, cy, cyaw, ck, sp, tp, dl, initial_state):
     t = [0.0]
     d = [0.0]
     a = [0.0]
-    target_ind, _ = calc_nearest_index(state, cx, cy, cyaw, 0)
+    # target_ind, _ = calc_nearest_index(state, cx, cy, cyaw, 0)
+    #replace with track to nearest theta
+    target_ind = get_nearest_theta(state, tp)
 
     odelta, oa = None, None
 
@@ -436,6 +446,11 @@ def do_simulation(cx, cy, cyaw, ck, sp, tp, dl, initial_state):
 
         oa, odelta, ox, oy, oyaw, ov = iterative_linear_mpc_control(
             xref, x0, dref, oa, odelta)
+
+        # what if i set 0a to 1 no matter what
+        #then it tracks
+        oa[0] = 0
+        # print("\n\noa: ", oa)
 
         if odelta is not None:
             di, ai = odelta[0], oa[0]
@@ -452,7 +467,7 @@ def do_simulation(cx, cy, cyaw, ck, sp, tp, dl, initial_state):
         a.append(ai)
 
         print("\ncar theta: ", state.theta)
-        print("car veclocity: ", state.v)
+        # print("car veclocity: ", state.v)
 
         if check_goal(state, goal, target_ind, len(cx)):
             print("Goal")
@@ -508,12 +523,13 @@ def calc_speed_profile(cx, cy, cyaw, target_speed):
     return speed_profile
 
 #A need to add function to add theta profile to points
-def calc_theta_profile(cx):
+def calc_theta_profile(cx, target_speed):
     #A for now we are just going to label them sequentually, at some point they should be calculated by some target speed
     theta_profile = []
     for i,_ in enumerate(cx):
         #just testing different theta profiles
-        theta_profile.append(i*0.1)
+        #this is at least correct for a straight line
+        theta_profile.append(cx[i]/1)
 
     return theta_profile
 
@@ -531,79 +547,6 @@ def smooth_yaw(yaw):
             dyaw = yaw[i + 1] - yaw[i]
 
     return yaw
-
-
-def get_straight_course(dl):
-    ax = [0.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0]
-    ay = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-
-    return cx, cy, cyaw, ck
-
-
-def get_straight_course2(dl):
-    ax = [0.0, -10.0, -20.0, -40.0, -50.0, -60.0, -70.0]
-    ay = [0.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-
-    return cx, cy, cyaw, ck
-
-
-def get_straight_course3(dl):
-    ax = [0.0, -10.0, -20.0, -40.0, -50.0, -60.0, -70.0]
-    ay = [0.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-
-    cyaw = [i - math.pi for i in cyaw]
-
-    return cx, cy, cyaw, ck
-
-
-def get_forward_course(dl):
-    ax = [0.0, 60.0, 125.0, 50.0, 75.0, 30.0, -10.0]
-    ay = [0.0, 0.0, 50.0, 65.0, 30.0, 50.0, -20.0]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-
-    return cx, cy, cyaw, ck
-
-
-def get_switch_back_course(dl):
-    ax = [0.0, 30.0, 6.0, 20.0, 35.0]
-    ay = [0.0, 0.0, 20.0, 35.0, 20.0]
-    cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-    ax = [35.0, 10.0, 0.0, 0.0]
-    ay = [20.0, 30.0, 5.0, 0.0]
-    cx2, cy2, cyaw2, ck2, s2 = cubic_spline_planner.calc_spline_course(
-        ax, ay, ds=dl)
-    cyaw2 = [i - math.pi for i in cyaw2]
-    cx.extend(cx2)
-    cy.extend(cy2)
-    cyaw.extend(cyaw2)
-    ck.extend(ck2)
-
-    return cx, cy, cyaw, ck
-
-# def get_fig17_traj(dl):
-    # ax = [0.0, 30.0, 6.0, 20.0, 35.0]
-    # ay = [0.0, 0.0, 20.0, 35.0, 20.0]
-    # cx, cy, cyaw, ck, s = cubic_spline_planner.calc_spline_course(
-    #     ax, ay, ds=dl)
-    # ax = [35.0, 10.0, 0.0, 0.0]
-    # ay = [20.0, 30.0, 5.0, 0.0]
-    # cx2, cy2, cyaw2, ck2, s2 = cubic_spline_planner.calc_spline_course(
-    #     ax, ay, ds=dl)
-    # cyaw2 = [i - math.pi for i in cyaw2]
-    # cx.extend(cx2)
-    # cy.extend(cy2)
-    # cyaw.extend(cyaw2)
-    # ck.extend(ck2)
-
-    # return cx, cy, cyaw, ck
 
 def get_straight_line(dl):
   ax = np.linspace(start=0, stop=50.0, endpoint=True)
@@ -625,13 +568,13 @@ def main():
     cx, cy, cyaw, ck = get_straight_line(dl)
 
     sp = calc_speed_profile(cx, cy, cyaw, TARGET_SPEED)
-    tp = calc_theta_profile(cx)
+    tp = calc_theta_profile(cx,1) #second argument is target speed
     # print("\nsp: ", sp)
     # print(ck)
 
     print(tp)
 
-    initial_state = State(x=cx[0], y=cy[0], yaw=cyaw[0], v=0.0, theta = 0)
+    initial_state = State(x=cx[0] +25 , y=cy[0] + 10, yaw=cyaw[0] - math.pi/2, v=1.0, theta = 0)
 
     t, x, y, yaw, v, d, a = do_simulation(
         cx, cy, cyaw, ck, sp, tp, dl, initial_state)
