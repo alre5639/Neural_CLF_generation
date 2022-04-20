@@ -1,9 +1,8 @@
 # Modified from: 
 # https://stackoverflow.com/questions/22488553/how-to-use-z3py-and-sympy-together
 
-from z3 import Real, Sqrt, Solver, sat
-from sympy.core import Mul, Expr, Add, Pow, Symbol, Number
-from sympy import *
+import z3
+import sympy
 
 def sympy_to_z3(sympy_var_list, sympy_exp):
     '''
@@ -15,7 +14,7 @@ def sympy_to_z3(sympy_var_list, sympy_exp):
 
     for var in sympy_var_list:
         name = var.name
-        z3_var = Real(name)
+        z3_var = z3.Real(name)
         z3_var_map[name] = z3_var
         z3_vars.append(z3_var)
 
@@ -30,34 +29,34 @@ def _sympy_to_z3_rec(var_map, e):
 
     rv = None
 
-    if not isinstance(e, Expr):
+    if not isinstance(e, sympy.core.Expr):
         raise RuntimeError("Expected sympy Expr: " + repr(e))
 
-    if isinstance(e, Symbol):
+    if isinstance(e, sympy.core.Symbol):
         rv = var_map.get(e.name)
 
         if rv == None:
             raise RuntimeError("No var was corresponds to symbol '" + str(e) + "'")
 
-    elif isinstance(e, Number):
+    elif isinstance(e, sympy.core.Number):
         rv = float(e)
-    elif isinstance(e, Mul):
+    elif isinstance(e, sympy.core.Mul):
         rv = _sympy_to_z3_rec(var_map, e.args[0])
 
         for child in e.args[1:]:
             rv *= _sympy_to_z3_rec(var_map, child)
-    elif isinstance(e, Add):
+    elif isinstance(e, sympy.core.Add):
         rv = _sympy_to_z3_rec(var_map, e.args[0])
 
         for child in e.args[1:]:
             rv += _sympy_to_z3_rec(var_map, child)
-    elif isinstance(e, Pow):
+    elif isinstance(e, sympy.core.Pow):
         term = _sympy_to_z3_rec(var_map, e.args[0])
         exponent = _sympy_to_z3_rec(var_map, e.args[1])
 
         if exponent == 0.5:
             # sqrt
-            rv = Sqrt(term)
+            rv = sympy.core.Sqrt(term)
         else:
             rv = term**exponent
 
@@ -69,17 +68,17 @@ def _sympy_to_z3_rec(var_map, e):
 
 if __name__ == "__main__":
     # define the variable list for the conversion and symbols for Sympy
-    var_list = x,y = symbols('x y')
+    var_list = x,y = sympy.symbols('x y')
     # expression to differentiate
     # gfg_exp = x**2 * y**2
     # gfg_exp = -x**2 + y + 1
     gfg_exp = (x**2) - 1 + y
     print(f"Before diff: {gfg_exp}")
     # differentiate wrt to x
-    dif_x = diff(gfg_exp, x)
+    dif_x = sympy.diff(gfg_exp, x)
     print(f"After differentiation wrt x: {dif_x}")
     # differentiate wrt to y
-    dif_y = diff(gfg_exp, y)
+    dif_y = sympy.diff(gfg_exp, y)
     print(f"After differentiation wrt y: {dif_y}")
 
     # convert to z3 formatted variables
@@ -90,17 +89,30 @@ if __name__ == "__main__":
     z3_x = z3_vars[0]
     z3_y = z3_vars[1]
 
-    # solve example problem from:
+    # Example 1 - from Sympy documentation
+    s = z3.Solver()
+    # s.add(z3_exp == 0) # add a constraint with converted expression
+    # s.add(z3_y >= 0) # add an extra constraint
+    # result = s.check()
+    # if result == z3.sat:
+    #     m = s.model()
+
+    #     print(f"SAT at x={m[z3_x]}, y={m[z3_y]}")
+    # else:
+    #     print("UNSAT")
+
+    # Example 2 -  from Stackoverflow
     # https://stackoverflow.com/questions/71862652/dreal4-forall-smt/71877195?noredirect=1#comment127032644_71877195
-    s = Solver()
-    s.add(z3_exp == 0) # add a constraint with converted expression
-    s.add(z3_y >= 0) # add an extra constraint
+    s = z3.Solver()
+    s.add(z3_x < 5)
+    s.add(z3_x > -5)
 
-    result = s.check()
+    # Add the negation of what we want to prove
+    s.add(z3.Not(z3.Exists([z3_y], z3.And(z3_y > -20, z3_y < 25, z3_exp < 0))))
 
-    if result == sat:
-        m = s.model()
-
-        print(f"SAT at x={m[z3_x]}, y={m[z3_y]}")
+    r = s.check()
+    if r == z3.sat:
+        print("Counter-example:")
+        print(s.model())
     else:
-        print("UNSAT")
+        print("Solver said: ", r)
