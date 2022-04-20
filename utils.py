@@ -1,3 +1,6 @@
+# Modified from: 
+# https://stackoverflow.com/questions/22488553/how-to-use-z3py-and-sympy-together
+
 from z3 import Real, Sqrt, Solver, sat
 from sympy.core import Mul, Expr, Add, Pow, Symbol, Number
 from sympy import *
@@ -88,7 +91,7 @@ if __name__ == "__main__":
     z3_y = z3_vars[1]
 
     # solve example problem from:
-    # https://stackoverflow.com/questions/22488553/how-to-use-z3py-and-sympy-together
+    # https://stackoverflow.com/questions/71862652/dreal4-forall-smt/71877195?noredirect=1#comment127032644_71877195
     s = Solver()
     s.add(z3_exp == 0) # add a constraint with converted expression
     s.add(z3_y >= 0) # add an extra constraint
