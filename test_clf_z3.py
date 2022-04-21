@@ -1,5 +1,6 @@
 from z3_clf_check import *
 import sympy
+
 #########################
 #check CLF is 0 # X = [0]
 #########################

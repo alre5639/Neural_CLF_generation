@@ -29,10 +29,13 @@ def CheckLyapunov_PD(x, V, ball_lb, ball_ub):
     #add the contraints
     for idx, state in enumerate(z3_var_list):
         #for each state, add contraint that we are in the ball region
-        s.add(state*state >= ball_lb*ball_lb, state*state <= ball_ub*ball_ub)
+        # s.add(state*state >= ball_lb*ball_lb, state*state <= ball_ub*ball_ub)
+        #testing
+        s.add(state > 0.5, state < 5, state < -0.5, state > -5)
 
     #add contraint that CLF is (+)
     s.add(z3_exp < 0)
+    # print(z3_exp)
 
     if s.check() == unsat:
         print("lyapunov Function is PD inbetween b_lb and b_up")
