@@ -35,7 +35,7 @@ Qf = Q  # state final matrix
 #A may need to update these
 GOAL_DIS = 1.5  # goal distance 
 STOP_SPEED = 0.5 / 3.6  # stop speed
-MAX_TIME = 500.0  # max simulation time
+MAX_TIME = 0.5  # max simulation time
 
 # iterative paramter
 MAX_ITER = 3  # Max iteration
@@ -53,7 +53,7 @@ BACKTOWHEEL = 1.0  # [m]
 WHEEL_LEN = 0.3  # [m]
 WHEEL_WIDTH = 0.2  # [m]
 TREAD = 0.7  # [m]
-WB = 2.5  # [m]
+WB = 0.2  # [m]
 
 MAX_STEER = np.deg2rad(45.0)  # maximum steering angle [rad]
 MAX_DSTEER = np.deg2rad(30.0)  # maximum steering speed [rad/s]
@@ -340,7 +340,10 @@ def calc_ref_trajectory(state, cx, cy, cyaw, ck, sp, tp, dl, pind):
 
     # ind, _ = calc_nearest_index(state, cx, cy, cyaw, pind)
     # replace this with get nearest theta
-    ind = get_nearest_theta(state,tp)
+
+    #going to update this to just go to 0
+    ind = 0
+    # ind = get_nearest_theta(state,tp)
 
     if pind >= ind:
         ind = pind
@@ -432,7 +435,10 @@ def do_simulation(cx, cy, cyaw, ck, sp, tp, dl, initial_state):
     a = [0.0]
     # target_ind, _ = calc_nearest_index(state, cx, cy, cyaw, 0)
     #replace with track to nearest theta
-    target_ind = get_nearest_theta(state, tp)
+
+    #I am going to update this just to go to the 0 state
+    # target_ind = get_nearest_theta(state, tp)
+    target_ind = 0
 
     odelta, oa = None, None
 
@@ -556,6 +562,50 @@ def get_straight_line(dl):
 
   return cx, cy, cyaw, ck
 
+def get_first_control(x):
+    dl = 1.0  # course tick
+    # cx, cy, cyaw, ck = get_straight_course(dl)
+    # cx, cy, cyaw, ck = get_straight_course2(dl)
+    # cx, cy, cyaw, ck = get_straight_course3(dl)
+    # cx, cy, cyaw, ck = get_forward_course(dl)
+    # cx, cy, cyaw, ck = get_switch_back_course(dl)
+    cx, cy, cyaw, ck = get_straight_line(dl)
+
+    x = np.array(x)
+    sp = calc_speed_profile(cx, cy, cyaw, TARGET_SPEED)
+    tp = calc_theta_profile(cx,1) #second argument is target speed
+    # print("\nsp: ", sp)
+    # print(ck)
+
+    print(tp)
+
+    initial_state = State(x=x[0], y=x[1], yaw=x[2], v=1.0, theta = 0)
+    print(initial_state)
+    t, x, y, yaw, v, d, a = do_simulation(
+        cx, cy, cyaw, ck, sp, tp, dl, initial_state)
+    # print(d)
+
+    # if show_animation:  # pragma: no cover
+    #     plt.close("all")
+    #     plt.subplots()
+    #     plt.plot(cx, cy, "-r", label="spline")
+    #     plt.plot(x, y, "-g", label="tracking")
+    #     plt.grid(True)
+    #     plt.axis("equal")
+    #     plt.xlabel("x[m]")
+    #     plt.ylabel("y[m]")
+    #     plt.legend()
+
+        # plt.subplots()
+        # plt.plot(t, v, "-r", label="speed")
+        # plt.grid(True)
+        # plt.xlabel("Time [s]")
+        # plt.ylabel("Speed [kmh]")
+
+        # plt.show()
+    
+    return [d[1],a[1]]
+
 def main():
     print(__file__ + " start!!")
 
@@ -601,6 +651,7 @@ def main():
 
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+    # get_first_control([-0.2632, -0.1077, -1.1775,  0.7223, -1.7964])
+    # main()
     # main2()

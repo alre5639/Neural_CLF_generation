@@ -77,3 +77,39 @@ def _sympy_to_z3_rec(var_map, e):
                             "Subexpression was '" + str(e) + "'.")
 
     return rv
+
+def approx_sin(x):
+    '''
+    approx_sin(x) is a piece wise linear appromxiation of sin valid between -4 and 4
+    '''
+    if x >= -1 and x <= 1:
+        return x
+    elif x > 1 and x <= 2.142:
+        return 1
+    elif x > 2.142 and x < 4:
+        return 3.14159 - x
+    elif x < -1 and x >= -2.142:
+        return -1
+    elif x < -2.142 and x > -4:
+        return -1.0 * 3.14159  -x
+    else:
+        raise ValueError("x is out of range for approx_sin()")
+
+def approx_cos(x):
+    '''
+    approx_cos(x) is a piece wise linear appromxiation of vos valid between -4 and 4
+    '''
+    if x >= -0.571 and x <= 0.571:
+        return 1
+    elif x > 0.571 and x <= 2.571:
+        return (3.14159 /2) - x
+    elif x > 2.571 and x < 4:
+        return -1
+    elif x < -0.571 and x >= -2.571:
+        return -3.14159/2 + x
+    elif x < -2.571 and x > -4:
+        return -1.0
+    else:
+        raise ValueError("x is out of range for approx_cos()")
+def utils_tanh(x):
+    ((2.718281828**x) - (2.718281828**(-x)))/((2.718281828**x) + (2.718281828**(-x)))

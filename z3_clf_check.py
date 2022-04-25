@@ -2,6 +2,7 @@ from z3 import *
 from utils import *
 import sympy
 import numpy as np
+import math
 
 def CheckLyapunov_zero(x, V):
     for state in x:
@@ -9,7 +10,7 @@ def CheckLyapunov_zero(x, V):
     return V
 
 #need to update this to conver V from sympy to z3 expression
-def CheckLyapunov_PD(x, V, ball_lb, ball_ub):    
+def CheckLyapunov_PD(x, V, ball_lb, ball_ub, v_0):    
     '''
     CheckLyapunov_PD() checks that the candidate CLF is positive definite in the provided region
 
@@ -33,8 +34,8 @@ def CheckLyapunov_PD(x, V, ball_lb, ball_ub):
         #testing
         s.add(state > 0.5, state < 5, state < -0.5, state > -5)
 
-    #add contraint that CLF is (+)
-    s.add(z3_exp < 0)
+    #add contraint that CLF is greater than v_0
+    s.add(z3_exp < v_0)
     # print(z3_exp)
 
     if s.check() == unsat:

@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from z3 import *
 from z3_clf_check import *
 import torch 
@@ -6,6 +8,7 @@ import numpy as np
 import timeit 
 import matplotlib.pyplot as plt
 import sympy
+import Time_based_MPC
 
 
 class Net(torch.nn.Module):
@@ -57,8 +60,8 @@ D_in = 5            # input dimension
 H1 = 6              # hidden dimension
 D_out = 1           # output dimension
 torch.manual_seed(10)  
-x_start = torch.Tensor(N, D_in).uniform_(-5, 5)           
-x_0 = torch.zeros([1, D_in])
+x_start = torch.Tensor(N, D_in).uniform_(-3.14, 3.14)           
+# x_0 = torch.zeros([1, D_in])
 
 '''
 For verifying 
@@ -66,8 +69,10 @@ For verifying
 state_list = x, y, v, phi, theta = sympy.symbols('x y v phi theta')
 cont_list = u1, u2= sympy.symbols('u1 u2')
 vars_ = state_list + cont_list
-#car params:
+#define control bounds
+u_bounds = [-3.14/4, 3.14/4, 0.99,1.01]
 
+#car params:
 L = 2.5 #wheel base
 
 epsilon = 0
@@ -76,16 +81,15 @@ ball_lb = 0.1
 ball_ub = 5
 
 #define the flows:
+#might not need this if we are just pluggin in the values
 flows = {
     x: v*sympy.cos(phi), #this is going to be a problem since z3 cant solve cos(), I think we can just make a piecewise function
+                            #what if I just approximate this with the piecewise function y=x [x<= pi/2] and y = -x +pi [pi/2<x<pi]
     y: v*sympy.sin(phi), #same comment as above,
     v: u2,
     phi: v*sympy.tanh(u1)/L,
     theta: 1
 }
-#u bounds
-
-start = timeit.default_timer()
 #remove lqr references
 model = Net(D_in,H1, D_out)
 L = []
@@ -100,8 +104,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 #x is initialized to a tensor of len(states) unifromly sampled from -5 to 5 
 V_candidate = model(x_start)
 print(len(V_candidate))
-
-X0 = model(x_0)
+print(x_start)
+# X0 = model(x_0)
 
 #get model params
 w1 = model.layer1.weight.data.numpy()
@@ -121,27 +125,104 @@ z2 = np.dot(a1,w2.T)+b2
 V_learn = 1/(1 + (2.71828182846**z2.item(0)))
 
 print(V_learn)
-
+v_0 = CheckLyapunov_zero(state_list,V_learn)
 #check V @ 0 :
-print("\nresult of 0 check is: ", CheckLyapunov_zero(state_list,V_learn))
+print("\nresult of 0 check is: ", v_0)
 #this isnt working right, hard coded bounds for now
-print("\nresult of PD test is: ", CheckLyapunov_PD(state_list,V_learn, 0.5, 0.5))
-#now need to figure out an approximation of sin and cos
-# if we just bound theta +/- pi/6 its pretty close as sin(x) = x and cos(x) = 1 -(x^2)/2
+print("\nresult of PD test is: ", CheckLyapunov_PD(state_list,V_learn, 0.1, 3.14, v_0))
 
 
-# f = f_value(x,u)
-# still dont know what circle turning is
-# Circle_Tuning = Tune(x)
-# Compute lie derivative of V : L_V = ∑∂V/∂xᵢ*fᵢ
-# L_V = torch.diagonal(torch.mm(torch.mm(torch.mm(dtanh(V_candidate),model.layer2.weight)\
-#                     *dtanh(torch.tanh(torch.mm(x,model.layer1.weight.t())+model.layer1.bias)),model.layer1.weight),f.t()),0)
+#lie derivative testing
+for i in range(100):
+    #get sum number of random x samples:
+    x_0 = torch.Tensor(N, D_in).uniform_(-3.14, 3.14) 
+    #get controls
+    u_0 = Time_based_MPC.get_first_control(x_0[0])
 
-# # With tuning term 
-# Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()\
-#             +2.2*((Circle_Tuning-6*V_candidate).pow(2)).mean()+(X0).pow(2) 
-# # Without tuning term
-# #         Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()+ 1.2*(X0).pow(2)
+    print("u_0 = ", u_0)
+    #check if L_V is negative
+    L_V = 0
+    for state in state_list:
+        L_V += sympy.diff(V_learn,state) * flows[state]
+
+    for idx,state in enumerate(state_list):
+        L_V = L_V.subs(state,x_0[1][idx])
+    for idx, cont in enumerate(cont_list):
+        L_V = L_V.subs(cont, u_0[idx])
+    
+    if L_V > 0:
+        break
+
+print(L_V)
+
+#need to sample about CE here
+#we will do 10 CE for now
+#init some size of samples we will just do 0.5 for now
+num_samps = 10
+samp_range = 0.5
+
+x_samp = np.random.uniform(np.array(x_0[0]) - samp_range, np.array(x_0[0]) + samp_range, [num_samps, len(np.array(x_0[0]))])
+
+# print(np.array(x_0[0]))
+temp = np.array(x_0[0])
+x_samp = np.append(x_samp, np.array([temp]), axis = 0)
+x_samp = x_samp.astype(float)
+#get controls for each x_samp:
+#hard coding this to 
+u_samp = np.empty((0,len(cont_list)), np.float64)
+for x in x_samp:
+    # print(np.array(Time_based_MPC.get_first_control(x)))
+    u_samp = np.append(u_samp, np.array([Time_based_MPC.get_first_control(x)]), axis = 0)
+print(x_samp)
+test_x_samp = deepcopy(x_samp)
+print(u_samp)
+#and then conver values into tensors
+#compute Lyapunov risk
+#pos risk
+pos_vals = []
+
+x_samp = torch.tensor([x_samp], dtype = torch.float)
+#pass the sampled x through the network
+model_out = model(x_samp)
+
+
+#i should be able to just pass the x_samps through the network
+for sample_states in test_x_samp:
+    pos_check = deepcopy(V_learn)
+    for idx,state in enumerate(state_list):
+        pos_check = pos_check.subs(state,sample_states[idx])
+    pos_vals.append(pos_check)
+
+#issue, these should be the same but their not, so we are calculating our network equation wrong
+print("network values: ", model_out)
+print("calulated values: ", pos_vals)
+
+###############################
+#caluclate Lyapunov Risk
+################################
+pos_risk = F.relu(-model_out)
+#cacluate zero risk
+zero_tesn = torch.zeros([1, D_in])
+zero_risk = model(zero_tesn).pow(2)
+print("zero risk is: ", zero_risk)
+
+#calculate L_V risk
+print(np.array(x_samp)[0])
+for outer_idx,sampled_x in enumerate(np.array(x_samp)[0]):
+    # print(sampled_x)
+    L_V = 0
+    for state in state_list:
+        L_V += sympy.diff(V_learn,state) * flows[state]
+
+    for idx,state in enumerate(state_list):
+        L_V = L_V.subs(state,sampled_x[idx])
+    for idx, cont in enumerate(cont_list):
+        L_V = L_V.subs(cont, u_samp[outer_idx][idx])
+    print(L_V)
+
+#for some reason this is returning only negative slopes when the CE is included that provided a positive slope
+
+# Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()+ 1.2*(X0).pow(2)
 
 
 # print(i, "Lyapunov Risk=",Lyapunov_risk.item()) 
