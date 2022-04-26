@@ -120,9 +120,9 @@ z1 = np.dot(state_list,w1.T)+b1
 a1 = []
 #will need to replace exp with the actual function(1/(1+(2.71828182846**(-x))
 for j in range(0,len(z1)):
-    a1.append(1/(1+(2.71828182846**z1[j])))
+    a1.append(1/(1+(2.71828182846**(-z1[j]))))
 z2 = np.dot(a1,w2.T)+b2
-V_learn = 1/(1 + (2.71828182846**z2.item(0)))
+V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
 
 print(V_learn)
 v_0 = CheckLyapunov_zero(state_list,V_learn)
