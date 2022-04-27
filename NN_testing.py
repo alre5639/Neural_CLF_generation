@@ -26,7 +26,7 @@ class Net(torch.nn.Module):
     def forward(self,x):
         # change this to a sigmoid function so we can z3 can solve it (z3 cant do trig)
         # sigmoid = torch.nn.Tanh()
-        sigmoid = torch.nn.Sigmoid()
+        sigmoid = torch.nn.Tanh()
         h_1 = sigmoid(self.layer1(x))
         out = sigmoid(self.layer2(h_1))
         # only need to return out now, u will come from the mpc
@@ -97,7 +97,7 @@ L = []
 i = 0 
 t = 0
 # max_iters = 2000
-learning_rate = 0.01#0.01
+learning_rate = 0.1#0.01
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # while i < max_iters and not valid: 
@@ -121,9 +121,11 @@ z1 = np.dot(state_list,w1.T)+b1
 a1 = []
 #will need to replace exp with the actual function(1/(1+(2.71828182846**(-x))
 for j in range(0,len(z1)):
-    a1.append(1/(1+(2.71828182846**(-z1[j]))))
+    # a1.append(1/(1+(2.71828182846**(-z1[j]))))
+    a1.append(((2.71828182846**z1[j])-(2.71828182846**-z1[j]))/((2.71828182846**z1[j])+(2.71828182846**-z1[j])))
 z2 = np.dot(a1,w2.T)+b2
-V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+# V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+V_learn = ((2.71828182846**z2.item(0))-(2.71828182846**-z2.item(0)))/((2.71828182846**z2.item(0))+(2.71828182846**-z2.item(0)))
 
 print(V_learn)
 v_0 = CheckLyapunov_zero(state_list,V_learn)
@@ -194,16 +196,17 @@ x_samp = torch.tensor([x_samp], dtype = torch.float)
 # model_out = model(x_samp)
 
 
-# #i should be able to just pass the x_samps through the network
-# for sample_states in test_x_samp:
-#     pos_check = deepcopy(V_learn)
-#     for idx,state in enumerate(state_list):
-#         pos_check = pos_check.subs(state,sample_states[idx])
-#     pos_vals.append(pos_check)
+#i should be able to just pass the x_samps through the network
+for sample_states in test_x_samp:
+    pos_check = deepcopy(V_learn)
+    for idx,state in enumerate(state_list):
+        pos_check = pos_check.subs(state,sample_states[idx])
+    pos_vals.append(pos_check)
 
 #issue, these should be the same but their not, so we are calculating our network equation wrong
-# print("network values: ", model_out)
-# print("calulated values: ", pos_vals)
+model_out = model(x_samp)
+print("network values: ", model_out)
+print("calulated values: ", pos_vals)
 
 # train!
 for j in range(1000):
@@ -231,9 +234,11 @@ for j in range(1000):
     a1 = []
     #will need to replace exp with the actual function(1/(1+(2.71828182846**(-x))
     for k in range(0,len(z1)):
-        a1.append(1/(1+(2.71828182846**(-z1[k]))))
+        # a1.append(1/(1+(2.71828182846**(-z1[j]))))
+        a1.append(((2.71828182846**z1[k])-(2.71828182846**-z1[k]))/((2.71828182846**z1[k])+(2.71828182846**-z1[k])))
     z2 = np.dot(a1,w2.T)+b2
-    V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+    # V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+    V_learn = ((2.71828182846**z2.item(0))-(2.71828182846**-z2.item(0)))/((2.71828182846**z2.item(0))+(2.71828182846**-z2.item(0)))
 
     x_samp_np = deepcopy(np.array(x_samp[0]))
     # print("x_sample: ", x_samp_np)
@@ -261,6 +266,8 @@ for j in range(1000):
     # print("P check: ", pos_check_tens)
     if j%10 == 0:
         print("LV_Check: ", LV_check_tens)
+
+    #changed coeff term on the lie derivative part
     Lyapunov_risk = (F.relu(-pos_check_tens)+ 1.5*F.relu(LV_check_tens+0.5)).mean()+ 1.2*zero_risk.pow(2)
     # print(Lyapunov_risk)
     if max(LV_check_tens) < 0:
