@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+
 from z3 import *
 from z3_clf_check import *
 import torch 
@@ -96,7 +97,7 @@ L = []
 i = 0 
 t = 0
 # max_iters = 2000
-learning_rate = 0.01
+learning_rate = 0.01#0.01
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # while i < max_iters and not valid: 
@@ -135,22 +136,29 @@ print("\nresult of PD test is: ", CheckLyapunov_PD(state_list,V_learn, 0.1, 3.14
 #lie derivative testing
 for i in range(100):
     #get sum number of random x samples:
-    x_0 = torch.Tensor(N, D_in).uniform_(-3.14, 3.14) 
+    #rightnow this is generating 500 samples of this with is not necessay
+    x_0 = torch.Tensor(1, D_in).uniform_(-3.14, 3.14) 
+    print("x_0 :", x_0)
     #get controls
     u_0 = Time_based_MPC.get_first_control(x_0[0])
 
     print("u_0 = ", u_0)
+    #need to set u_0 of 1 to 1 since V always == 1
+    u_0[1] = 1.0
     #check if L_V is negative
     L_V = 0
     for state in state_list:
         L_V += sympy.diff(V_learn,state) * flows[state]
 
     for idx,state in enumerate(state_list):
-        L_V = L_V.subs(state,x_0[1][idx])
+        L_V = L_V.subs(state,x_0[0][idx])
     for idx, cont in enumerate(cont_list):
         L_V = L_V.subs(cont, u_0[idx])
     
     if L_V > 0:
+        print("x_O: ", x_0)
+        print("u_0: ", u_0)
+        print("Lie V: ", L_V)
         break
 
 print(L_V)
@@ -183,53 +191,87 @@ pos_vals = []
 
 x_samp = torch.tensor([x_samp], dtype = torch.float)
 #pass the sampled x through the network
-model_out = model(x_samp)
+# model_out = model(x_samp)
 
 
-#i should be able to just pass the x_samps through the network
-for sample_states in test_x_samp:
-    pos_check = deepcopy(V_learn)
-    for idx,state in enumerate(state_list):
-        pos_check = pos_check.subs(state,sample_states[idx])
-    pos_vals.append(pos_check)
+# #i should be able to just pass the x_samps through the network
+# for sample_states in test_x_samp:
+#     pos_check = deepcopy(V_learn)
+#     for idx,state in enumerate(state_list):
+#         pos_check = pos_check.subs(state,sample_states[idx])
+#     pos_vals.append(pos_check)
 
 #issue, these should be the same but their not, so we are calculating our network equation wrong
-print("network values: ", model_out)
-print("calulated values: ", pos_vals)
+# print("network values: ", model_out)
+# print("calulated values: ", pos_vals)
 
-###############################
-#caluclate Lyapunov Risk
-################################
-pos_risk = F.relu(-model_out)
-#cacluate zero risk
-zero_tesn = torch.zeros([1, D_in])
-zero_risk = model(zero_tesn).pow(2)
-print("zero risk is: ", zero_risk)
+# train!
+for j in range(1000):
+    ###############################
+    #caluclate Lyapunov Risk
+    ################################
+    model_out = model(x_samp)
+    pos_risk = F.relu(-model_out)
+    #cacluate zero risk
+    zero_tesn = torch.zeros([1, D_in])
+    zero_risk = model(zero_tesn).pow(2)
+    # print("zero risk is: ", zero_risk)
 
-#calculate L_V risk
-print(np.array(x_samp)[0])
-for outer_idx,sampled_x in enumerate(np.array(x_samp)[0]):
-    # print(sampled_x)
+    #calculate L_V risk
+
+    #get model params
+    w1 = model.layer1.weight.data.numpy()
+    w2 = model.layer2.weight.data.numpy()
+    b1 = model.layer1.bias.data.numpy()
+    b2 = model.layer2.bias.data.numpy()
+    #calculate the canidate V
+    # Candidate V
+    z1 = np.dot(state_list,w1.T)+b1
+
+    a1 = []
+    #will need to replace exp with the actual function(1/(1+(2.71828182846**(-x))
+    for k in range(0,len(z1)):
+        a1.append(1/(1+(2.71828182846**(-z1[k]))))
+    z2 = np.dot(a1,w2.T)+b2
+    V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+
+    x_samp_np = deepcopy(np.array(x_samp[0]))
+    # print("x_sample: ", x_samp_np)
+    # print("u_samp: ", u_samp)
     L_V = 0
+    L_V_samp = []
+    #compute Lie Derivative
     for state in state_list:
         L_V += sympy.diff(V_learn,state) * flows[state]
+    #check if it is negative for the sampled values:
+    for i in range(len(x_samp_np)):
+        L_V_cp = deepcopy(L_V)
+        for idx,state in enumerate(state_list):
+            L_V_cp = L_V_cp.subs(state,x_samp_np[i][idx])
+        for idx, cont in enumerate(cont_list):
+            L_V_cp = L_V_cp.subs(cont, u_samp[i][idx])
+        L_V_samp.append(L_V_cp)
+    # print("computed L_V: ", L_V_samp)
 
-    for idx,state in enumerate(state_list):
-        L_V = L_V.subs(state,sampled_x[idx])
-    for idx, cont in enumerate(cont_list):
-        L_V = L_V.subs(cont, u_samp[outer_idx][idx])
-    print(L_V)
 
-#for some reason this is returning only negative slopes when the CE is included that provided a positive slope
+    #why are we adding 0.5 to the L_V_samp caclulation
+    #convert lists to tensor
+    pos_check_tens = torch.tensor(model_out,dtype = torch.float)
+    LV_check_tens = torch.tensor(L_V_samp,dtype = torch.float)
+    # print("P check: ", pos_check_tens)
+    if j%10 == 0:
+        print("LV_Check: ", LV_check_tens)
+    Lyapunov_risk = (F.relu(-pos_check_tens)+ 1.5*F.relu(LV_check_tens+0.5)).mean()+ 1.2*zero_risk.pow(2)
+    # print(Lyapunov_risk)
+    if max(LV_check_tens) < 0:
+        break
 
-# Lyapunov_risk = (F.relu(-V_candidate)+ 1.5*F.relu(L_V+0.5)).mean()+ 1.2*(X0).pow(2)
-
-
-# print(i, "Lyapunov Risk=",Lyapunov_risk.item()) 
-# L.append(Lyapunov_risk.item())
-# optimizer.zero_grad()
-# Lyapunov_risk.backward()
-# optimizer.step() 
+    print(j, "Lyapunov Risk=",Lyapunov_risk.item()) 
+    L.append(Lyapunov_risk.item())
+    optimizer.zero_grad()
+    Lyapunov_risk.backward()
+    optimizer.step() 
+    
 
 
 
