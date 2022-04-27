@@ -88,7 +88,7 @@ flows = {
                             #what if I just approximate this with the piecewise function y=x [x<= pi/2] and y = -x +pi [pi/2<x<pi]
     y: v*sympy.sin(phi), #same comment as above,
     v: u2,
-    phi: v*sympy.tanh(u1)/L,
+    phi: v*sympy.tan(u1)/L,
     theta: 1
 }
 #remove lqr references
@@ -266,12 +266,13 @@ for j in range(1000):
     # print("P check: ", pos_check_tens)
     if j%10 == 0:
         print("LV_Check: ", LV_check_tens)
+        if max(LV_check_tens) < 0:
+        break
 
     #changed coeff term on the lie derivative part
     Lyapunov_risk = (F.relu(-pos_check_tens)+ 1.5*F.relu(LV_check_tens+0.5)).mean()+ 1.2*zero_risk.pow(2)
     # print(Lyapunov_risk)
-    if max(LV_check_tens) < 0:
-        break
+    
 
     print(j, "Lyapunov Risk=",Lyapunov_risk.item()) 
     L.append(Lyapunov_risk.item())
