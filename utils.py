@@ -3,6 +3,7 @@
 
 import z3
 import sympy
+import numpy as np
 
 def sympy_to_z3(sympy_var_list, sympy_exp):
     '''
@@ -113,3 +114,44 @@ def approx_cos(x):
         raise ValueError("x is out of range for approx_cos()")
 def utils_tanh(x):
     ((2.718281828**x) - (2.718281828**(-x)))/((2.718281828**x) + (2.718281828**(-x)))
+
+def NN_to_sympy(w1,w2,b1,b2, state_list):
+    z1 = np.dot(state_list,w1.T)+b1
+
+    a1 = []
+    #will need to replace exp with the actual function(1/(1+(2.71828182846**(-x))
+    for j in range(0,len(z1)):
+        # a1.append(1/(1+(2.71828182846**(-z1[j]))))
+        a1.append(((2.71828182846**z1[j])-(2.71828182846**-z1[j]))/((2.71828182846**z1[j])+(2.71828182846**-z1[j])))
+    z2 = np.dot(a1,w2.T)+b2
+    # V_learn = 1/(1 + (2.71828182846**(-z2.item(0))))
+    V_learn = ((2.71828182846**z2.item(0))-(2.71828182846**-z2.item(0)))/((2.71828182846**z2.item(0))+(2.71828182846**-z2.item(0)))
+    return V_learn
+def two_Hlayer_NN_to_sympy(model, state_list):
+    w1 = model.layer1.weight.data.numpy()
+    w2 = model.layer2.weight.data.numpy()
+    w3 = model.layer3.weight.data.numpy()
+    b1 = model.layer1.bias.data.numpy()
+    b2 = model.layer2.bias.data.numpy()
+    b3 = model.layer3.bias.data.numpy()
+
+    # Candidate V
+    z1 = np.dot(state_list,w1.T)+b1
+
+    a1 = []
+    a2 = []
+    for j in range(0,len(z1)):
+        a1.append(sympy.tanh(z1[j]))
+    z2 = np.dot(a1,w2.T)+b2
+    for j in range(0,len(z2)):
+        a2.append(sympy.tanh(z2[j]))
+    z3 = np.dot(a2,w3.T)+b3
+    V_learn = sympy.tanh(z3.item(0))
+    return V_learn
+
+
+def calc_LV(V, f, state_list):
+    L_V = 0
+    for state in state_list:
+        L_V += sympy.diff(V,state) * f[state]
+    return L_V
