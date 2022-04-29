@@ -115,7 +115,12 @@ def approx_cos(x):
 def utils_tanh(x):
     ((2.718281828**x) - (2.718281828**(-x)))/((2.718281828**x) + (2.718281828**(-x)))
 
-def NN_to_sympy(w1,w2,b1,b2, state_list):
+def NN_to_sympy(model, state_list):
+    w1 = model.layer1.weight.data.numpy()
+    w2 = model.layer3.weight.data.numpy()
+    b1 = model.layer1.bias.data.numpy()
+    b2 = model.layer3.bias.data.numpy()
+
     z1 = np.dot(state_list,w1.T)+b1
 
     a1 = []

@@ -580,7 +580,7 @@ def get_first_control(x):
     print(tp)
 
     initial_state = State(x=x[0], y=x[1], yaw=x[2], v=1.0, theta = 0)
-    print(initial_state)
+    # print(initial_state)
     t, x, y, yaw, v, d, a = do_simulation(
         cx, cy, cyaw, ck, sp, tp, dl, initial_state)
     # print(d)
@@ -604,7 +604,8 @@ def get_first_control(x):
 
         # plt.show()
     
-    return [d[1],a[1]]
+    #im going to always return 1 since we are calling velocity u1
+    return [d[1]]
 
 def main():
     print(__file__ + " start!!")
